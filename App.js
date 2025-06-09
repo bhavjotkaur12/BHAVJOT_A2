@@ -1,4 +1,3 @@
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import {
   StyleSheet,
@@ -6,17 +5,21 @@ import {
   TextInput,
   View,
   TouchableOpacity,
-  Alert,
+  Modal,
+  ScrollView,
 } from 'react-native';
 
 export default function App() {
-  // State for form inputs
   const [sendingAddress, setSendingAddress] = useState("");
   const [destinationAddress, setDestinationAddress] = useState("");
   const [parcelType, setParcelType] = useState(null);
   const [parcelWeight, setParcelWeight] = useState("");
   const [selectedRate, setSelectedRate] = useState(null);
   const [signatureOption, setSignatureOption] = useState(false);
+
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalSummary, setModalSummary] = useState({});
 
   const PACKAGE_RATES = {
     standard: 12.99,
@@ -35,36 +38,36 @@ export default function App() {
 
   const validateForm = () => {
     if (!sendingAddress || !destinationAddress) {
-      Alert.alert("Error", "Please enter both addresses");
+      setModalSummary({ error: "Please enter both addresses" });
+      setModalVisible(true);
       return false;
     }
-
     if (!parcelType) {
-      Alert.alert("Error", "Please select a parcel type");
+      setModalSummary({ error: "Please select a parcel type" });
+      setModalVisible(true);
       return false;
     }
-
     if (!parcelWeight) {
-      Alert.alert("Error", "Please enter parcel weight");
+      setModalSummary({ error: "Please enter parcel weight" });
+      setModalVisible(true);
       return false;
     }
-
     const weight = parseFloat(parcelWeight);
     if (parcelType === "package" && weight > 44) {
-      Alert.alert("Error", "Package weight cannot exceed 44 lbs");
+      setModalSummary({ error: "Package weight cannot exceed 44 lbs" });
+      setModalVisible(true);
       return false;
     }
-
     if (parcelType === "letter" && weight > 1.1) {
-      Alert.alert("Error", "Letter weight cannot exceed 1.1 lbs");
+      setModalSummary({ error: "Letter weight cannot exceed 1.1 lbs" });
+      setModalVisible(true);
       return false;
     }
-
     if (!selectedRate) {
-      Alert.alert("Error", "Please select a rate");
+      setModalSummary({ error: "Please select a rate" });
+      setModalVisible(true);
       return false;
     }
-
     return true;
   };
 
@@ -73,7 +76,6 @@ export default function App() {
     const subtotal = rates[selectedRate] + (signatureOption ? SIGNATURE_COST : 0);
     const tax = subtotal * TAX_RATE;
     const total = subtotal + tax;
-
     return {
       subtotal: subtotal.toFixed(2),
       tax: tax.toFixed(2),
@@ -84,7 +86,7 @@ export default function App() {
   const handleGetRate = () => {
     if (validateForm()) {
       const totals = calculateTotal();
-      const summary = {
+      setModalSummary({
         sendingAddress,
         destinationAddress,
         parcelType,
@@ -92,301 +94,393 @@ export default function App() {
         selectedRate,
         signatureOption,
         ...totals
-      };
-      
-      // Create a more readable formatted message
-      const message = [
-        `From: ${summary.sendingAddress}`,
-        `To: ${summary.destinationAddress}`,
-        `Type: ${summary.parcelType.charAt(0).toUpperCase() + summary.parcelType.slice(1)}`,
-        `Weight: ${summary.parcelWeight} lbs`,
-        `Rate: $${summary.selectedRate}`,
-        summary.signatureOption ? `Signature Option: +$${SIGNATURE_COST}` : '',
-        `\nSubtotal: $${summary.subtotal}`,
-        `Tax (13%): $${summary.tax}`,
-        `\nTotal: $${summary.total}`
-      ].filter(line => line !== '').join('\n');
-
-      Alert.alert(
-        "SwiftShip Order Summary",
-        message,
-        [
-          {
-            text: "Close",
-            style: "default"
-          }
-        ]
-      );
+      });
+      setModalVisible(true);
     }
   };
 
+  const getRateDisplay = () => {
+    if (!modalSummary.selectedRate || !modalSummary.parcelType) {
+      return "";
+    }
+
+    const rates = modalSummary.parcelType === "package" ? PACKAGE_RATES : LETTER_RATES;
+    const rateAmount = rates[modalSummary.selectedRate];
+    const rateType = modalSummary.selectedRate[0].toUpperCase() + modalSummary.selectedRate.slice(1);
+
+    return `${rateAmount} (${rateType})`;
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.header}>SwiftShip</Text>
-        <Text style={styles.subHeader}>Fast & Reliable Delivery</Text>
-      </View>
+    <View style={styles.bg}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.header}>SwiftShip</Text>
+          <Text style={styles.subHeader}>Fast & Reliable Delivery</Text>
 
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          value={sendingAddress}
-          placeholder="Enter Sending Address"
-          onChangeText={setSendingAddress}
-          multiline
-          placeholderTextColor="#666"
-        />
+          <TextInput
+            style={styles.input}
+            value={sendingAddress}
+            placeholder="Enter Sending Address"
+            onChangeText={setSendingAddress}
+            placeholderTextColor="#666"
+          />
 
-        <TextInput
-          style={styles.input}
-          value={destinationAddress}
-          placeholder="Enter Destination Address"
-          onChangeText={setDestinationAddress}
-          multiline
-          placeholderTextColor="#666"
-        />
+          <TextInput
+            style={styles.input}
+            value={destinationAddress}
+            placeholder="Enter Destination Address"
+            onChangeText={setDestinationAddress}
+            placeholderTextColor="#666"
+          />
 
-        <View style={styles.radioGroup}>
           <Text style={styles.label}>Parcel Type:</Text>
-          <TouchableOpacity
-            style={styles.radioButton}
-            onPress={() => setParcelType("package")}
-          >
-            <View style={styles.radioCircle}>
-              {parcelType === "package" && <View style={styles.radioDot} />}
-            </View>
-            <Text style={styles.radioText}>Package</Text>
-          </TouchableOpacity>
+          <View style={styles.radioGroup}>
+            <TouchableOpacity
+              style={[
+                styles.radioButton,
+                parcelType === "package" && styles.radioButtonSelected,
+              ]}
+              onPress={() => setParcelType("package")}
+            >
+              <View style={styles.radioCircle}>
+                {parcelType === "package" && <View style={styles.radioDot} />}
+              </View>
+              <Text style={styles.radioText}>Package</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.radioButton,
+                parcelType === "letter" && styles.radioButtonSelected,
+              ]}
+              onPress={() => setParcelType("letter")}
+            >
+              <View style={styles.radioCircle}>
+                {parcelType === "letter" && <View style={styles.radioDot} />}
+              </View>
+              <Text style={styles.radioText}>Letter or Document</Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.radioButton}
-            onPress={() => setParcelType("letter")}
-          >
-            <View style={styles.radioCircle}>
-              {parcelType === "letter" && <View style={styles.radioDot} />}
-            </View>
-            <Text style={styles.radioText}>Letter or Document</Text>
-          </TouchableOpacity>
-        </View>
+          <TextInput
+            style={styles.input}
+            value={parcelWeight}
+            placeholder="Enter Parcel Weight in Lbs"
+            onChangeText={setParcelWeight}
+            keyboardType="numeric"
+            placeholderTextColor="#666"
+          />
 
-        <TextInput
-          style={styles.input}
-          value={parcelWeight}
-          placeholder="Enter Parcel Weight"
-          onChangeText={setParcelWeight}
-          keyboardType="numeric"
-          placeholderTextColor="#666"
-        />
-
-        <View style={styles.radioGroup}>
           <Text style={styles.label}>Choose Rate:</Text>
           {parcelType && (
-            <>
+            <View style={styles.radioGroup}>
               <TouchableOpacity
-                style={styles.radioButton}
+                style={[
+                  styles.radioButton,
+                  selectedRate === "standard" && styles.radioButtonSelected,
+                ]}
                 onPress={() => setSelectedRate("standard")}
               >
                 <View style={styles.radioCircle}>
                   {selectedRate === "standard" && <View style={styles.radioDot} />}
                 </View>
-                <Text style={styles.radioText}>Standard (${parcelType === "package" ? PACKAGE_RATES.standard : LETTER_RATES.standard})</Text>
+                <Text style={styles.radioText}>
+                  Standard (${parcelType === "package" ? PACKAGE_RATES.standard : LETTER_RATES.standard})
+                </Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={styles.radioButton}
+                style={[
+                  styles.radioButton,
+                  selectedRate === "xpress" && styles.radioButtonSelected,
+                ]}
                 onPress={() => setSelectedRate("xpress")}
               >
                 <View style={styles.radioCircle}>
                   {selectedRate === "xpress" && <View style={styles.radioDot} />}
                 </View>
-                <Text style={styles.radioText}>Xpress Post (${parcelType === "package" ? PACKAGE_RATES.xpress : LETTER_RATES.xpress})</Text>
+                <Text style={styles.radioText}>
+                  Xpress Post (${parcelType === "package" ? PACKAGE_RATES.xpress : LETTER_RATES.xpress})
+                </Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={styles.radioButton}
+                style={[
+                  styles.radioButton,
+                  selectedRate === "priority" && styles.radioButtonSelected,
+                ]}
                 onPress={() => setSelectedRate("priority")}
               >
                 <View style={styles.radioCircle}>
                   {selectedRate === "priority" && <View style={styles.radioDot} />}
                 </View>
-                <Text style={styles.radioText}>Priority Post (${parcelType === "package" ? PACKAGE_RATES.priority : LETTER_RATES.priority})</Text>
+                <Text style={styles.radioText}>
+                  Priority Post (${parcelType === "package" ? PACKAGE_RATES.priority : LETTER_RATES.priority})
+                </Text>
               </TouchableOpacity>
-            </>
+            </View>
           )}
+
+          <TouchableOpacity
+            style={[
+              styles.checkbox,
+              signatureOption && styles.checkboxSelected,
+            ]}
+            onPress={() => setSignatureOption(!signatureOption)}
+          >
+            <View style={styles.checkboxBox}>
+              {signatureOption && <View style={styles.checkboxCheck} />}
+            </View>
+            <Text style={styles.checkboxText}>Signature Option (+${SIGNATURE_COST})</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.button} onPress={handleGetRate}>
+            <Text style={styles.buttonText}>Get Rate</Text>
+          </TouchableOpacity>
         </View>
+      </ScrollView>
 
-        <TouchableOpacity
-          style={styles.checkbox}
-          onPress={() => setSignatureOption(!signatureOption)}
-        >
-          <View style={styles.checkboxBox}>
-            {signatureOption && <View style={styles.checkboxCheck} />}
+      <Modal
+        visible={modalVisible}
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {modalSummary.error ? (
+              <Text style={styles.errorText}>{modalSummary.error}</Text>
+            ) : (
+              <>
+                <Text style={styles.modalHeader}>Order Summary</Text>
+                <View style={styles.divider} />
+                <Text style={styles.modalText}>From: {modalSummary.sendingAddress}</Text>
+                <Text style={styles.modalText}>To: {modalSummary.destinationAddress}</Text>
+                <Text style={styles.modalText}>Type: {modalSummary.parcelType}</Text>
+                <Text style={styles.modalText}>Weight: {modalSummary.parcelWeight} lbs</Text>
+                <Text style={styles.modalText}>Rate: ${getRateDisplay()}</Text>
+                {modalSummary.signatureOption && (
+                  <Text style={styles.modalText}>Signature Option: +${SIGNATURE_COST}</Text>
+                )}
+                <Text style={styles.modalText}>Subtotal: ${modalSummary.subtotal}</Text>
+                <Text style={styles.modalText}>Tax (13%): ${modalSummary.tax}</Text>
+                <Text style={styles.modalText}>Total: ${modalSummary.total}</Text>
+              </>
+            )}
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.checkboxText}>Signature Option (+${SIGNATURE_COST})</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.button} onPress={handleGetRate}>
-          <Text style={styles.buttonText}>Calculate Shipping</Text>
-        </TouchableOpacity>
-      </View>
-
-      <StatusBar style="auto" />
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  bg: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: '#eaf6fb',
+    justifyContent: 'center',
   },
-  headerContainer: {
-    backgroundColor: '#2c3e50',
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+  scrollContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    elevation: 8,
+    marginVertical: 32,
   },
   header: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1a5276',
     textAlign: 'center',
+    marginBottom: 4,
   },
   subHeader: {
-    fontSize: 16,
-    color: '#bdc3c7',
+    fontSize: 18,
+    color: '#2980b9',
     textAlign: 'center',
-    marginTop: 5,
-  },
-  formContainer: {
-    flex: 1,
-    padding: 20,
+    marginBottom: 24,
+    fontWeight: '500',
   },
   input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#dcdde1',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-    fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  radioGroup: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: '#f8fafd',
+    borderWidth: 1.5,
+    borderColor: '#aed6f1',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 18,
+    fontSize: 17,
+    color: '#1a5276',
   },
   label: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 15,
+    color: '#1a5276',
+    marginBottom: 10,
+    marginTop: 8,
+  },
+  radioGroup: {
+    backgroundColor: '#f8fafd',
+    borderRadius: 12,
+    marginBottom: 18,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#d6eaf8',
   },
   radioButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  radioButtonSelected: {
+    backgroundColor: '#eaf2fb',
   },
   radioCircle: {
-    height: 24,
-    width: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#3498db',
+    height: 26,
+    width: 26,
+    borderRadius: 13,
+    borderWidth: 2.5,
+    borderColor: '#2980b9',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    backgroundColor: '#fff',
   },
   radioDot: {
-    height: 12,
-    width: 12,
-    borderRadius: 6,
-    backgroundColor: '#3498db',
+    height: 13,
+    width: 13,
+    borderRadius: 7,
+    backgroundColor: '#2980b9',
   },
   radioText: {
-    fontSize: 16,
-    color: '#2c3e50',
+    fontSize: 17,
+    color: '#1a5276',
+    fontWeight: '500',
   },
   checkbox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: '#f8fafd',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#d6eaf8',
+  },
+  checkboxSelected: {
+    backgroundColor: '#eaf2fb',
+    borderColor: '#2980b9',
   },
   checkboxBox: {
-    height: 24,
-    width: 24,
-    borderWidth: 2,
-    borderColor: '#3498db',
+    height: 26,
+    width: 26,
+    borderWidth: 2.5,
+    borderColor: '#2980b9',
     marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 4,
+    borderRadius: 6,
+    backgroundColor: '#fff',
   },
   checkboxCheck: {
-    height: 14,
-    width: 14,
-    backgroundColor: '#3498db',
-    borderRadius: 2,
+    height: 15,
+    width: 15,
+    backgroundColor: '#2980b9',
+    borderRadius: 3,
   },
   checkboxText: {
-    fontSize: 16,
-    color: '#2c3e50',
+    fontSize: 17,
+    color: '#1a5276',
+    fontWeight: '500',
   },
   button: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#2980b9',
     padding: 18,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    marginTop: 8,
+    shadowColor: '#2980b9',
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4,
   },
   buttonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 28,
+    width: '85%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHeader: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#1a5276',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  divider: {
+    width: '100%',
+    height: 1.5,
+    backgroundColor: '#d6eaf8',
+    marginVertical: 10,
+    borderRadius: 1,
+  },
+  modalText: {
+    fontSize: 18,
+    color: '#1a5276',
+    marginBottom: 6,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  errorText: {
+    fontSize: 20,
+    color: 'red',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  modalButton: {
+    backgroundColor: '#2980b9',
+    paddingVertical: 12,
+    paddingHorizontal: 36,
+    borderRadius: 10,
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });
